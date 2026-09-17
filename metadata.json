@@ -1,0 +1,6 @@
+{
+  "name": "نظام إدارة وجرد المستودعات",
+  "description": "نظام ويب وتطبيق موبايل متكامل لإدارة وجرد المستودعات وقراءة الباركود للشركات والموظفين بدعم كامل للقيم العشرية والعمل دون اتصال.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

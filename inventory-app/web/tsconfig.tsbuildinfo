@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/components/DashboardLayout.tsx","./src/context/AuthContext.tsx","./src/lib/api.ts","./src/pages/DashboardHome.tsx","./src/pages/Employees.tsx","./src/pages/Items.tsx","./src/pages/Login.tsx","./src/pages/PendingItems.tsx","./src/pages/Tasks.tsx","./src/pages/Warehouses.tsx"],"version":"5.9.3"}

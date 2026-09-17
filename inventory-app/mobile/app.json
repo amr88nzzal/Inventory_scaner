@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "تطبيق الجرد",
+    "slug": "inventory-audit-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "android": {
+      "package": "com.yourcompany.inventoryaudit",
+      "googleServicesFile": "./google-services.json",
+      "permissions": ["CAMERA", "NOTIFICATIONS"]
+    },
+    "ios": {
+      "bundleIdentifier": "com.yourcompany.inventoryaudit",
+      "infoPlist": {
+        "NSCameraUsageDescription": "التطبيق يحتاج الكاميرا لمسح الباركود وتصوير المواد غير المسجلة"
+      }
+    },
+    "plugins": ["expo-camera", "expo-notifications"]
+  }
+}

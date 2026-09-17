@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: "IBM Plex Sans Arabic", sans-serif;
+}
+
+.font-display {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.font-mono {
+  font-family: "IBM Plex Mono", monospace;
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+::selection {
+  background: #c5601f33;
+}
+
+:focus-visible {
+  outline: 2px solid #c5601f;
+  outline-offset: 2px;
+}

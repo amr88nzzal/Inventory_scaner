@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: inventory
+      POSTGRES_DB: inventory_audit
+    volumes:
+      - inventory_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432" # non-default host port to avoid clashing with other DBs on the server
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: "postgresql://inventory:inventory@db:5432/inventory_audit?schema=public"
+      JWT_SECRET: "change-this-to-a-long-random-string"
+      JWT_EXPIRES_IN: "12h"
+      PORT: 4000
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./uploads:/app/uploads
+
+volumes:
+  inventory_pgdata:

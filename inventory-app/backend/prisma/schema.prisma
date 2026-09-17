@@ -1,0 +1,205 @@
+// Prisma schema for the Inventory Audit App (Phase 1 + Phase 2)
+// DB: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  EMPLOYEE
+  REVIEWER
+}
+
+enum TaskStatus {
+  ASSIGNED
+  IN_PROGRESS
+  PENDING_REVIEW
+  NEEDS_RECOUNT
+  APPROVED
+}
+
+enum PendingItemStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Company {
+  id          String   @id @default(uuid())
+  name        String
+  createdAt   DateTime @default(now())
+
+  users       User[]
+  warehouses  Warehouse[]
+  items       Item[]
+  auditTasks  AuditTask[]
+  pendingItems PendingItem[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  company      Company  @relation(fields: [companyId], references: [id])
+  companyId    String
+  name         String
+  username     String   @unique
+  passwordHash String
+  role         UserRole @default(EMPLOYEE)
+  // scope-based access: list of warehouse IDs this user is restricted to (empty = all)
+  warehouseScope String[] @default([])
+  fcmToken     String?  // Firebase Cloud Messaging device token, registered from the mobile app
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  assignedTasks   AuditTaskAssignee[]
+  auditRecords    AuditRecord[]
+  pendingItemsReported PendingItem[]
+}
+
+model Warehouse {
+  id        String   @id @default(uuid())
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  name      String
+  locations Location[]
+  auditTasks AuditTask[]
+}
+
+model Location {
+  id          String    @id @default(uuid())
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  warehouseId String
+  // free-form label, e.g. "الواجهة رقم 1", "صالة رقم 5"
+  label       String
+}
+
+// A unit definition for an item, e.g. { unit: "box", qtyPerUnit: 24 }
+model ItemUnit {
+  id         String @id @default(uuid())
+  item       Item   @relation(fields: [itemId], references: [id])
+  itemId     String
+  unitName   String // e.g. "قطعة", "صندوق", "كرتونة"
+  qtyPerUnit Float    // mandatory base quantity, e.g. 24
+  isBase     Boolean @default(false) // true for the smallest unit (e.g. "قطعة" = 1)
+}
+
+model Item {
+  id          String   @id @default(uuid())
+  company     Company  @relation(fields: [companyId], references: [id])
+  companyId   String
+  barcode     String
+  name        String
+  itemCode    String?
+  price       Decimal? @db.Decimal(12, 2)
+  supplier    String?
+  category    String?
+  accountNo   String?
+  photoUrl    String?
+  systemQty   Float      @default(0) // current theoretical/system balance (base unit)
+  // per-item custom recount tolerance override (percentage, e.g. 5.0). Null = use company default.
+  recountTolerancePct Decimal? @db.Decimal(5, 2)
+
+  units       ItemUnit[]
+  auditRecords AuditRecord[]
+
+  @@unique([companyId, barcode])
+}
+
+model AuditTask {
+  id           String     @id @default(uuid())
+  company      Company    @relation(fields: [companyId], references: [id])
+  companyId    String
+  warehouse    Warehouse  @relation(fields: [warehouseId], references: [id])
+  warehouseId  String
+  taskNumber   String     @unique // human/reportable task number
+  // scope: "ALL" | "CATEGORY" | "SUPPLIER" | "ITEM_LIST"
+  scopeType    String
+  scopeValue   String?    // category name / supplier name / comma list of item IDs
+  locationScope String?   // shelf/location filter
+  startTime    DateTime
+  status       TaskStatus @default(ASSIGNED)
+  blindCount   Boolean    @default(false) // hide system qty from employee during counting
+  showVarianceAtEnd Boolean @default(true) // admin-configurable
+  generalRecountTolerancePct Decimal? @db.Decimal(5, 2) // overrides company default for this task
+  aggregateAcrossLocations Boolean @default(true) // true = sum same item across locations, false = keep sequential entries
+  createdAt    DateTime   @default(now())
+
+  assignees    AuditTaskAssignee[]
+  auditRecords AuditRecord[]
+  reports      AuditReport[]
+}
+
+model AuditTaskAssignee {
+  id          String    @id @default(uuid())
+  task        AuditTask @relation(fields: [taskId], references: [id])
+  taskId      String
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String
+
+  @@unique([taskId, userId])
+}
+
+// Append-only audit log. Never updated in place — each scan/edit is a new row.
+// This is the core of the offline-sync design: conflict resolution is handled
+// by treating every scan as an immutable event keyed by (employeeId, deviceTimestamp).
+model AuditRecord {
+  id              String   @id @default(uuid())
+  task            AuditTask @relation(fields: [taskId], references: [id])
+  taskId          String
+  employee        User     @relation(fields: [employeeId], references: [id])
+  employeeId      String
+  item            Item?    @relation(fields: [itemId], references: [id]) // null if barcode unregistered (see PendingItem)
+  itemId          String?
+  barcodeScanned  String
+  locationLabel   String   // where the scan happened, e.g. "المستودع - الواجهة 1"
+  unitName        String   // unit the employee counted in (e.g. "صندوق")
+  qtyInUnit       Float      // quantity as entered by employee, in unitName units
+  qtyInBaseUnits  Float      // qtyInUnit * qtyPerUnit, precomputed for aggregation
+  condition       String   @default("NORMAL") // NORMAL | DAMAGED
+  photoUrl        String?  // required if condition = DAMAGED
+  deviceTimestamp DateTime // captured on the phone, used for ordering/conflict resolution
+  serverTimestamp DateTime @default(now()) // when it landed on the server (sync time)
+  syncBatchId     String?  // groups records uploaded together in one sync batch
+
+  @@index([taskId, itemId])
+  @@index([employeeId, deviceTimestamp])
+}
+
+model PendingItem {
+  id              String            @id @default(uuid())
+  company         Company           @relation(fields: [companyId], references: [id])
+  companyId       String
+  barcode         String
+  name            String?
+  supplier        String?
+  category        String?
+  accountNo       String?
+  unitName        String?
+  location        String?
+  price           Decimal?          @db.Decimal(12, 2)
+  quantity        Float?
+  photoProductUrl String?
+  photoBarcodeUrl String?
+  reportedBy      User              @relation(fields: [reportedById], references: [id])
+  reportedById    String
+  taskId          String?
+  status          PendingItemStatus @default(PENDING)
+  createdAt       DateTime          @default(now())
+}
+
+// Generated once an admin/reviewer finalizes a task — the consolidated,
+// exportable result (CSV / accounting sync payload).
+model AuditReport {
+  id           String    @id @default(uuid())
+  task         AuditTask @relation(fields: [taskId], references: [id])
+  taskId       String
+  generatedById String
+  generatedAt  DateTime  @default(now())
+  summaryJson  Json      // per-item: systemQty, countedQty, varianceQty, variancePct, flaggedForRecount
+  csvFileUrl   String?
+}
