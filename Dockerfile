@@ -10,7 +10,7 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
 # Install dependencies
-RUN npm install
+RUN npm install --include=optional
 
 # Copy source code
 COPY . .
