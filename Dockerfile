@@ -6,11 +6,11 @@ WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency manifests
-COPY package.json package-lock.json ./
+COPY package.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
-RUN npm install --include=optional
+# Install dependencies fresh for container OS/CPU architecture
+RUN npm install --include=optional --force
 
 # Copy source code
 COPY . .
@@ -33,10 +33,10 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 # Install production dependencies
-COPY package.json package-lock.json ./
+COPY package.json ./
 COPY prisma ./prisma/
 
-RUN npm install --omit=dev
+RUN npm install --omit=dev --force
 RUN npx prisma generate --schema=prisma/schema.prisma
 
 # Copy built assets from builder
