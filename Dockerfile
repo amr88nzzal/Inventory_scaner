@@ -41,7 +41,6 @@ RUN npx prisma generate --schema=prisma/schema.prisma
 
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/inventory-app ./inventory-app
 
 # Create persistent uploads directory
