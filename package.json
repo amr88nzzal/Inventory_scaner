@@ -55,11 +55,15 @@
     "vite": "^6.2.3"
   },
   "optionalDependencies": {
+    "@esbuild/linux-arm64": "*",
+    "@esbuild/linux-x64": "*",
     "@rollup/rollup-linux-arm64-gnu": "*",
     "@rollup/rollup-linux-arm64-musl": "*",
     "@rollup/rollup-linux-x64-gnu": "*",
     "@rollup/rollup-linux-x64-musl": "*",
-    "@esbuild/linux-arm64": "*",
-    "@esbuild/linux-x64": "*"
+    "lightningcss-linux-arm64-gnu": "*",
+    "lightningcss-linux-arm64-musl": "*",
+    "lightningcss-linux-x64-gnu": "*",
+    "lightningcss-linux-x64-musl": "*"
   }
 }
