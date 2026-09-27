@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: inventory_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-inventory_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inventory_password_secure123}
+      POSTGRES_DB: ${POSTGRES_DB:-inventory_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inventory_user} -d ${POSTGRES_DB:-inventory_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inventory_app
+    restart: always
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-inventory_user}:${POSTGRES_PASSWORD:-inventory_password_secure123}@postgres:5432/${POSTGRES_DB:-inventory_db}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-key-change-this-in-production-1234567890}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - app_uploads:/app/uploads
+
+volumes:
+  postgres_data:
+  app_uploads:
