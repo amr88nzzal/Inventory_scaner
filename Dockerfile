@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -6,8 +6,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-# Install all dependencies (including devDependencies for build)
-RUN npm ci
+# Install all dependencies
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -19,7 +19,7 @@ RUN npx prisma generate --schema=prisma/schema.prisma
 RUN npm run build
 
 # Runner stage
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
@@ -30,7 +30,7 @@ ENV PORT=3000
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-RUN npm ci --only=production
+RUN npm install --omit=dev
 RUN npx prisma generate --schema=prisma/schema.prisma
 
 # Copy built assets from builder
