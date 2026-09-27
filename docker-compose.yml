@@ -26,9 +26,10 @@ services:
     container_name: inventory_app
     restart: always
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     environment:
       NODE_ENV: production
+      PORT: ${PORT:-3000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-inventory_user}:${POSTGRES_PASSWORD:-inventory_password_secure123}@postgres:5432/${POSTGRES_DB:-inventory_db}?schema=public
       JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-key-change-this-in-production-1234567890}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
