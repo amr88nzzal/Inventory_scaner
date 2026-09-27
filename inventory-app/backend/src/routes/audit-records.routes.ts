@@ -124,6 +124,16 @@ router.patch("/:id", async (req, res) => {
 // Delete an audit record row
 router.delete("/:id", async (req, res) => {
   try {
+    const existing = await prisma.auditRecord.findUnique({
+      where: { id: req.params.id },
+      include: { task: true },
+    });
+    if (!existing) {
+      return res.json({ success: true, message: "Record already deleted" });
+    }
+    if (existing.task && existing.task.companyId !== req.auth!.companyId) {
+      return res.status(403).json({ error: "غير مصرح لك بحذف هذا السجل" });
+    }
     await prisma.auditRecord.delete({ where: { id: req.params.id } });
     res.json({ success: true });
   } catch (err: any) {
@@ -131,15 +141,21 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// The last N scans for a task, for the "recent activity" list with +/- edit
-// buttons on the mobile screen.
+// The scans for a task, for the audit records table and recent activity list
 router.get("/task/:taskId/recent", async (req, res) => {
-  const limit = Number(req.query.limit ?? 5);
+  const limit = Math.min(Number(req.query.limit ?? 500), 1000);
+  const whereClause: any = { taskId: req.params.taskId };
+  if (req.query.employeeId) {
+    whereClause.employeeId = String(req.query.employeeId);
+  } else if (req.auth?.role !== "ADMIN" && req.auth?.role !== "REVIEWER") {
+    whereClause.employeeId = req.auth!.userId;
+  }
+
   const records = await prisma.auditRecord.findMany({
-    where: { taskId: req.params.taskId, employeeId: req.auth!.userId },
+    where: whereClause,
     orderBy: { deviceTimestamp: "desc" },
     take: limit,
-    include: { item: true },
+    include: { item: true, employee: { select: { id: true, name: true } } },
   });
   res.json(records);
 });

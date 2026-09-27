@@ -5,24 +5,60 @@ export const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || (type
   ? `${window.location.protocol}//${window.location.host}/api`
   : "http://localhost:3000/api");
 
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+export function getToken(): string | null {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token || token === "undefined" || token === "null" || token === "[object Object]") {
+      return null;
+    }
+    return token;
+  } catch {
+    return null;
+  }
 }
-export function setToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token);
+export function setToken(token: string | null | undefined) {
+  try {
+    if (!token || token === "undefined" || token === "null") {
+      localStorage.removeItem(TOKEN_KEY);
+    } else {
+      localStorage.setItem(TOKEN_KEY, token);
+    }
+  } catch {
+    // ignore localstorage errors
+  }
 }
 export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // ignore
+  }
 }
 
-async function request(path: string, options: RequestInit = {}) {
+async function request(path: string, options: RequestInit = {}, retries = 2): Promise<any> {
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...((options.headers as Record<string, string>) || {}),
   };
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  } catch (err: any) {
+    if (retries > 0) {
+      await new Promise((r) => setTimeout(r, 1200));
+      return request(path, options, retries - 1);
+    }
+    throw err;
+  }
+
+  // If server is waking up or database is busy (503/504), automatically retry seamlessly
+  if ((res.status === 503 || res.status === 504) && retries > 0) {
+    await new Promise((r) => setTimeout(r, 1500));
+    return request(path, options, retries - 1);
+  }
 
   if (res.status === 204) return null;
 

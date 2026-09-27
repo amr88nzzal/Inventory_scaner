@@ -4,14 +4,34 @@ const TOKEN_KEY = "inventory_admin_token";
 // e.g. "https://inventory-api.amrodev.com"
 export const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:4000";
 
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+export function getToken(): string | null {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token || token === "undefined" || token === "null" || token === "[object Object]") {
+      return null;
+    }
+    return token;
+  } catch {
+    return null;
+  }
 }
-export function setToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token);
+export function setToken(token: string | null | undefined) {
+  try {
+    if (!token || token === "undefined" || token === "null") {
+      localStorage.removeItem(TOKEN_KEY);
+    } else {
+      localStorage.setItem(TOKEN_KEY, token);
+    }
+  } catch {
+    // ignore
+  }
 }
 export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 async function request(path: string, options: RequestInit = {}) {

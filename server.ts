@@ -38,10 +38,20 @@ async function startServer() {
 
   // Guard API requests for DATABASE_URL
   app.use("/api", (req, res, next) => {
-    if (!process.env.DATABASE_URL) {
-      return res.status(500).json({
-        error: "DATABASE_URL is not set. Please configure DATABASE_URL in your Settings -> Secrets panel.",
-      });
+    const dbUrl = process.env.DATABASE_URL?.trim();
+    if (!dbUrl || (!dbUrl.startsWith("postgresql://") && !dbUrl.startsWith("postgres://"))) {
+      const adminUser = process.env.SQL_ADMIN_USER || process.env.SQL_USER;
+      const adminPass = process.env.SQL_ADMIN_PASSWORD || process.env.SQL_PASSWORD;
+      const host = process.env.SQL_HOST;
+      const dbName = process.env.SQL_DB_NAME || "cloud_sql_development_database";
+
+      if (adminUser && adminPass && host) {
+        process.env.DATABASE_URL = `postgresql://${encodeURIComponent(adminUser)}:${encodeURIComponent(adminPass)}@localhost/${dbName}?host=${encodeURIComponent(host)}&connection_limit=25&pool_timeout=45&connect_timeout=45`;
+      } else {
+        return res.status(500).json({
+          error: "DATABASE_URL is not configured properly. It must start with postgresql:// or postgres://",
+        });
+      }
     }
     next();
   });
@@ -70,7 +80,16 @@ async function startServer() {
     let message = err?.message || "حدث خطأ في خادم البيانات";
 
     if (err?.code && typeof err.code === "string" && err.code.startsWith("P")) {
-      if (err.code === "P2002") {
+      if (err.code === "P1001") {
+        statusCode = 503;
+        message = "جاري تنشيط الاتصال بقاعدة البيانات السحابية (Cloud SQL)، يرجى الانتظار وإعادة المحاولة";
+      } else if (err.code === "P1008") {
+        statusCode = 504;
+        message = "استغرقت عملية الاستعلام وقتاً أطول من المتوقع، يرجى إعادة المحاولة";
+      } else if (err.code === "P1017") {
+        statusCode = 503;
+        message = "تمت إعادة تعيين الاتصال بقاعدة البيانات، يرجى إعادة المحاولة";
+      } else if (err.code === "P2002") {
         statusCode = 400;
         message = "هذا العنصر مكرر أو موجود مسبقاً في النظام";
       } else if (err.code === "P2025") {

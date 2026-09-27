@@ -1,8 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Point this at your Oracle Cloud deployment, e.g.
-// "https://inventory-api.amrodev.com"
-export const API_BASE_URL = "https://inventory-api.amrodev.com";
+// Default to the current live cloud instance (/api)
+export const DEFAULT_API_URL = "https://ais-pre-tmyu5h3l35eoaqzcyclo53-895653288134.europe-west2.run.app/api";
+
+async function getBaseUrl() {
+  const custom = await AsyncStorage.getItem("custom_api_url");
+  return custom || DEFAULT_API_URL;
+}
 
 async function authHeader() {
   const token = await AsyncStorage.getItem("auth_token");
@@ -10,12 +14,13 @@ async function authHeader() {
 }
 
 async function request(path: string, options: RequestInit = {}) {
+  const baseUrl = await getBaseUrl();
   const headers = {
     "Content-Type": "application/json",
     ...(await authHeader()),
     ...(options.headers || {}),
   };
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const res = await fetch(`${baseUrl}${path}`, { ...options, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ? JSON.stringify(body.error) : `Request failed: ${res.status}`);

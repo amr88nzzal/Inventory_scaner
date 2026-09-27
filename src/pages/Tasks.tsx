@@ -551,6 +551,9 @@ function AuditCounterModal({
   const [showFinalSubmitConfirmModal, setShowFinalSubmitConfirmModal] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [recentScans, setRecentScans] = useState<any[]>([]);
+  const [recordToDelete, setRecordToDelete] = useState<any | null>(null);
+  const [deletingRecord, setDeletingRecord] = useState(false);
+  const [tableSearchQuery, setTableSearchQuery] = useState("");
 
   // Unknown item reporting state
   const [showPendingForm, setShowPendingForm] = useState(false);
@@ -737,7 +740,7 @@ function AuditCounterModal({
   async function handleAdjustQty(sc: any, delta: number) {
     const newQty = sc.qtyInUnit + delta;
     if (newQty <= 0) {
-      handleDeleteScan(sc.id);
+      setRecordToDelete(sc);
       return;
     }
     try {
@@ -749,15 +752,30 @@ function AuditCounterModal({
     }
   }
 
-  // Delete scan
-  async function handleDeleteScan(id: string) {
-    if (!confirm("هل أنت تأكد من إزالة هذه القراءة من الجرد؟")) return;
+  // Delete scan with in-app confirmation (iframe-safe, no window.confirm)
+  function requestDeleteScan(sc: any) {
+    setRecordToDelete(sc);
+  }
+
+  async function confirmDeleteScan() {
+    if (!recordToDelete) return;
+    setDeletingRecord(true);
     try {
-      await api.deleteScanRecord(id);
+      await api.deleteScanRecord(recordToDelete.id);
+      setMessage({
+        type: "success",
+        text: `🗑️ تم حذف قراءة (${recordToDelete.item?.name || recordToDelete.barcodeScanned || "الصنف"}) من الجرد بنجاح!`,
+      });
+      setRecordToDelete(null);
+      if (editingScan?.id === recordToDelete.id) {
+        setEditingScan(null);
+      }
       loadRecent();
       onScanDone();
     } catch (err: any) {
       setMessage({ type: "error", text: "فشل الحذف: " + (err.message || "") });
+    } finally {
+      setDeletingRecord(false);
     }
   }
 
@@ -1248,16 +1266,53 @@ function AuditCounterModal({
 
         {/* Audit Record Items List (Optimized for Mobile Card Layout & Desktop Table Layout) */}
         <div className="bg-white border border-graphite/20 rounded-sm shadow-md overflow-hidden">
-          <div className="bg-graphite/5 px-4 py-2.5 border-b border-graphite/15 flex items-center justify-between">
-            <h3 className="font-bold text-ink text-xs md:text-sm flex items-center gap-2">
-              <span>📋 جدول الجرد المسجل</span>
-              <span className="bg-ink text-paper px-2 py-0.5 rounded-full text-[11px] font-mono">{recentScans.length} صنف</span>
-            </h3>
+          <div className="bg-graphite/5 px-4 py-2.5 border-b border-graphite/15 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-bold text-ink text-xs md:text-sm flex items-center gap-2">
+                <span>📋 جدول الجرد المسجل</span>
+                <span className="bg-ink text-paper px-2 py-0.5 rounded-full text-[11px] font-mono">{recentScans.length} قراءة</span>
+              </h3>
+              <span className="text-[11px] text-graphite/60 bg-paper px-2 py-0.5 rounded border border-graphite/20 font-mono">
+                مجموع الكميات: <strong className="text-signal">{recentScans.reduce((sum, sc) => sum + (Number(sc.qtyInUnit) || 0), 0)}</strong>
+              </span>
+            </div>
+
+            {/* In-table search filter */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="بحث في جدول الجرد (اسم، باركود، رف)..."
+                  value={tableSearchQuery}
+                  onChange={(e) => setTableSearchQuery(e.target.value)}
+                  className="bg-white border border-graphite/30 rounded px-2.5 py-1 text-xs w-48 md:w-64 focus:border-signal focus:outline-none"
+                />
+                {tableSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setTableSearchQuery("")}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 text-graphite/40 hover:text-ink text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* MOBILE RESPONSIVE CARD VIEW (Visible on small screens) */}
           <div className="block md:hidden divide-y divide-graphite/15">
-            {recentScans.map((sc) => (
+            {recentScans
+              .filter((sc) => {
+                if (!tableSearchQuery.trim()) return true;
+                const q = tableSearchQuery.trim().toLowerCase();
+                const name = (sc.item?.name || "").toLowerCase();
+                const barcode = (sc.barcodeScanned || sc.barcode || "").toLowerCase();
+                const loc = (sc.locationLabel || sc.location || "").toLowerCase();
+                const notes = (sc.notes || "").toLowerCase();
+                return name.includes(q) || barcode.includes(q) || loc.includes(q) || notes.includes(q);
+              })
+              .map((sc) => (
               <div key={sc.id} className="p-3 hover:bg-signal/5 transition-colors flex items-center justify-between gap-3">
                 {/* FAR RIGHT (أقصى اليمين): Quantity Control with + on top, - on bottom */}
                 <div className="flex flex-col items-center justify-center bg-signal/5 p-1.5 rounded border border-signal/20 shrink-0">
@@ -1339,6 +1394,7 @@ function AuditCounterModal({
                 {/* FAR LEFT (أقصى اليسار): Edit & Delete buttons */}
                 <div className="flex flex-col items-center gap-1 shrink-0">
                   <button
+                    type="button"
                     onClick={() => openEditModal(sc)}
                     className="bg-signal/10 text-signal hover:bg-signal hover:text-paper p-2 rounded text-xs font-bold cursor-pointer"
                     title="تعديل"
@@ -1346,9 +1402,10 @@ function AuditCounterModal({
                     ✏️
                   </button>
                   <button
-                    onClick={() => handleDeleteScan(sc.id)}
-                    className="text-warn hover:bg-warn/10 p-1.5 rounded font-bold text-xs cursor-pointer"
-                    title="حذف"
+                    type="button"
+                    onClick={() => requestDeleteScan(sc)}
+                    className="text-warn hover:bg-warn/10 p-2 rounded font-bold text-xs cursor-pointer active:scale-95 transition-transform"
+                    title="حذف القراءة من الجرد"
                   >
                     🗑️
                   </button>
@@ -1379,7 +1436,17 @@ function AuditCounterModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-graphite/10">
-                {recentScans.map((sc) => (
+                {recentScans
+                  .filter((sc) => {
+                    if (!tableSearchQuery.trim()) return true;
+                    const q = tableSearchQuery.trim().toLowerCase();
+                    const name = (sc.item?.name || "").toLowerCase();
+                    const barcode = (sc.barcodeScanned || sc.barcode || "").toLowerCase();
+                    const loc = (sc.locationLabel || sc.location || "").toLowerCase();
+                    const notes = (sc.notes || "").toLowerCase();
+                    return name.includes(q) || barcode.includes(q) || loc.includes(q) || notes.includes(q);
+                  })
+                  .map((sc) => (
                   <tr key={sc.id} className="hover:bg-signal/5 transition-colors group">
                     <td onClick={() => openEditModal(sc)} className="py-3 px-4 cursor-pointer">
                       <div className="font-bold text-ink text-sm group-hover:text-signal transition-colors">
@@ -1466,16 +1533,19 @@ function AuditCounterModal({
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
+                          type="button"
                           onClick={() => openEditModal(sc)}
                           className="bg-signal/10 text-signal hover:bg-signal hover:text-paper px-3 py-1 rounded text-xs font-bold transition-colors cursor-pointer"
                         >
                           ✏️ تعديل
                         </button>
                         <button
-                          onClick={() => handleDeleteScan(sc.id)}
-                          className="text-warn hover:underline font-bold text-xs cursor-pointer"
+                          type="button"
+                          onClick={() => requestDeleteScan(sc)}
+                          className="bg-warn/10 text-warn hover:bg-warn hover:text-paper px-3 py-1 rounded font-bold text-xs cursor-pointer transition-colors"
+                          title="حذف القراءة من الجرد"
                         >
-                          حذف
+                          🗑️ حذف
                         </button>
                       </div>
                     </td>
@@ -1694,23 +1764,85 @@ function AuditCounterModal({
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-graphite/15">
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-graphite/15">
                 <button
                   type="button"
-                  onClick={() => setEditingScan(null)}
-                  className="px-3 py-1 text-xs font-bold border border-graphite/30 rounded hover:bg-graphite/10 cursor-pointer"
+                  onClick={() => requestDeleteScan(editingScan)}
+                  className="text-warn hover:bg-warn/10 px-2.5 py-1 text-xs font-bold border border-warn/30 rounded cursor-pointer transition-colors flex items-center gap-1"
                 >
-                  إلغاء
+                  <span>🗑️ حذف القراءة</span>
                 </button>
-                <button
-                  type="submit"
-                  disabled={savingEdit}
-                  className="bg-signal text-paper px-4 py-1.5 rounded text-xs font-bold hover:bg-ink transition-colors cursor-pointer shadow-xs"
-                >
-                  {savingEdit ? "جارٍ الحفظ..." : "حفظ التعديلات (Enter ↵)"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingScan(null)}
+                    className="px-3 py-1 text-xs font-bold border border-graphite/30 rounded hover:bg-graphite/10 cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="bg-signal text-paper px-4 py-1.5 rounded text-xs font-bold hover:bg-ink transition-colors cursor-pointer shadow-xs"
+                  >
+                    {savingEdit ? "جارٍ الحفظ..." : "حفظ التعديلات (Enter ↵)"}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Delete Confirmation Modal (Iframe safe, no window.confirm) */}
+      {recordToDelete && (
+        <div className="fixed inset-0 bg-ink/75 backdrop-blur-xs z-[999] flex items-center justify-center p-3 animate-fade-in" dir="rtl">
+          <div className="bg-white rounded-lg border border-warn/30 shadow-2xl max-w-sm w-full p-5 space-y-4">
+            <div className="flex items-center gap-3 text-warn">
+              <div className="w-10 h-10 rounded-full bg-warn/15 flex items-center justify-center text-xl shrink-0">
+                🗑️
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-ink">تأكيد حذف قراءة الجرد</h3>
+                <p className="text-[11px] text-graphite/60">هذا الإجراء سيحذف القراءة المسجلة من جدول الجرد</p>
+              </div>
+            </div>
+
+            <div className="bg-paper p-3 rounded border border-graphite/15 text-xs space-y-1.5">
+              <div className="font-bold text-ink text-sm truncate">
+                {recordToDelete.item?.name || "صنف مسجل"}
+              </div>
+              <div className="flex items-center justify-between text-graphite/70 text-[11px] font-mono">
+                <span>الباركود: {recordToDelete.barcodeScanned || recordToDelete.barcode}</span>
+                <span className="font-bold text-signal">{recordToDelete.qtyInUnit} {recordToDelete.unitName || "قطعة"}</span>
+              </div>
+              <div className="text-[11px] text-graphite/60">
+                الموقع: 📍 {recordToDelete.locationLabel || recordToDelete.location || "الموقع المسند"}
+              </div>
+            </div>
+
+            <p className="text-xs text-graphite/80 font-medium">
+              هل أنت متأكد من رغبتك في إزالة هذا السجل نهائياً من جرد هذه المهمة؟
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-graphite/15">
+              <button
+                type="button"
+                onClick={() => setRecordToDelete(null)}
+                disabled={deletingRecord}
+                className="px-4 py-2 text-xs font-bold border border-graphite/30 rounded hover:bg-graphite/10 cursor-pointer transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteScan}
+                disabled={deletingRecord}
+                className="bg-warn hover:bg-ink text-paper px-4 py-2 rounded text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center gap-1.5"
+              >
+                <span>{deletingRecord ? "جارٍ الحذف..." : "نعم، حذف القراءة"}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

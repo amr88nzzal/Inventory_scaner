@@ -12,6 +12,10 @@ export default function Items() {
   const [importResult, setImportResult] = useState<string | null>(null);
   const [showDbImport, setShowDbImport] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<any | null>(null);
+  const [deletingItem, setDeletingItem] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -52,26 +56,31 @@ export default function Items() {
 
   async function handleClearAll() {
     if (!isAdmin) return;
-    if (confirm("🚨 تحذير هام جداً:\n\nهل أنت متأكد من رغبتك في حذف جميع الأصناف والوحدات من النظام بشكل كامل ونهائي؟\n\nهذا الإجراء سيقوم بتفريغ جدول الأصناف لتتمكن من إعادة الاستيراد وتفادي أي تعارض بالباركود والرمز المحاسبي القديم.\n\nلا يمكن التراجع عن هذا القرار!")) {
-      try {
-        await api.clearItems();
-        setImportResult("تم حذف جميع الأصناف والوحدات من النظام بنجاح. يمكنك الآن استيراد ملف جديد بالكامل.");
-        load();
-      } catch (err: any) {
-        alert("حدث خطأ أثناء حذف الأصناف: " + err.message);
-      }
+    setClearingAll(true);
+    try {
+      await api.clearItems();
+      setImportResult("تم تفريغ وحذف جميع الأصناف والوحدات من النظام بنجاح. يمكنك الآن استيراد ملف جديد بالكامل.");
+      setShowClearConfirm(false);
+      load();
+    } catch (err: any) {
+      setImportResult("حدث خطأ أثناء حذف الأصناف: " + (err.message || "خطأ غير معروف"));
+    } finally {
+      setClearingAll(false);
     }
   }
 
-  async function handleDeleteItem(id: string) {
-    if (!isAdmin) return;
-    if (confirm("هل أنت متأكد من رغبتك في حذف هذا الصنف المحدد نهائياً من النظام؟")) {
-      try {
-        await api.deleteItem(id);
-        load();
-      } catch (err: any) {
-        alert("حدث خطأ أثناء حذف الصنف: " + err.message);
-      }
+  async function handleDeleteItemConfirm() {
+    if (!isAdmin || !itemToDelete) return;
+    setDeletingItem(true);
+    try {
+      await api.deleteItem(itemToDelete.id);
+      setImportResult(`تم حذف الصنف (${itemToDelete.name}) نهائياً من النظام.`);
+      setItemToDelete(null);
+      load();
+    } catch (err: any) {
+      setImportResult("حدث خطأ أثناء حذف الصنف: " + (err.message || "خطأ غير معروف"));
+    } finally {
+      setDeletingItem(false);
     }
   }
 
@@ -147,8 +156,8 @@ export default function Items() {
 
                 {items.length > 0 && (
                   <button
-                    onClick={handleClearAll}
-                    className="bg-warn/10 text-warn border border-warn/20 hover:bg-warn hover:text-paper px-4 py-2 rounded-sm text-sm transition-colors font-semibold"
+                    onClick={() => setShowClearConfirm(true)}
+                    className="bg-warn/10 text-warn border border-warn/20 hover:bg-warn hover:text-paper px-4 py-2 rounded-sm text-sm transition-colors font-semibold cursor-pointer"
                   >
                     🗑️ حذف جميع الأصناف
                   </button>
@@ -235,7 +244,7 @@ export default function Items() {
                       </button>
                       <span className="text-graphite/20">|</span>
                       <button
-                        onClick={() => handleDeleteItem(it.id)}
+                        onClick={() => setItemToDelete(it)}
                         className="text-warn hover:underline text-xs font-semibold px-2 py-1 cursor-pointer"
                       >
                         حذف
@@ -266,6 +275,93 @@ export default function Items() {
             load();
           }}
         />
+      )}
+
+      {/* In-App Delete Item Modal */}
+      {isAdmin && itemToDelete && (
+        <div className="fixed inset-0 bg-ink/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 animate-fade-in" dir="rtl">
+          <div className="bg-white rounded-lg border border-warn/30 shadow-2xl max-w-sm w-full p-5 space-y-4">
+            <div className="flex items-center gap-3 text-warn">
+              <div className="w-10 h-10 rounded-full bg-warn/15 flex items-center justify-center text-xl shrink-0">
+                🗑️
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-ink">تأكيد حذف الصنف</h3>
+                <p className="text-[11px] text-graphite/60">حذف نهائي للصنف وبياناته من النظام</p>
+              </div>
+            </div>
+
+            <div className="bg-paper p-3 rounded border border-graphite/15 text-xs space-y-1">
+              <div className="font-bold text-ink text-sm truncate">{itemToDelete.name}</div>
+              <div className="text-graphite/70 font-mono text-[11px]">الباركود: {itemToDelete.barcode}</div>
+              <div className="text-graphite/60 text-[11px]">الرصيد النظري: {itemToDelete.systemQty}</div>
+            </div>
+
+            <p className="text-xs text-graphite/80 font-medium">
+              هل أنت متأكد من رغبتك في حذف هذا الصنف نهائياً؟
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-graphite/15">
+              <button
+                type="button"
+                onClick={() => setItemToDelete(null)}
+                disabled={deletingItem}
+                className="px-4 py-2 text-xs font-bold border border-graphite/30 rounded hover:bg-graphite/10 cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteItemConfirm}
+                disabled={deletingItem}
+                className="bg-warn hover:bg-ink text-paper px-4 py-2 rounded text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center gap-1.5"
+              >
+                <span>{deletingItem ? "جارٍ الحذف..." : "نعم، حذف الصنف"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Clear All Items Modal */}
+      {isAdmin && showClearConfirm && (
+        <div className="fixed inset-0 bg-ink/80 backdrop-blur-xs z-50 flex items-center justify-center p-3 animate-fade-in" dir="rtl">
+          <div className="bg-white rounded-lg border-2 border-warn shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3 text-warn">
+              <div className="w-12 h-12 rounded-full bg-warn/15 flex items-center justify-center text-2xl shrink-0">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-ink">تحذير: تفريغ وحذف جميع الأصناف</h3>
+                <p className="text-xs text-graphite/60">هذا الإجراء سيقوم بحذف جميع الأصناف والوحدات من النظام</p>
+              </div>
+            </div>
+
+            <div className="bg-warn/10 p-3.5 rounded border border-warn/30 text-xs text-warn font-semibold space-y-1 leading-relaxed">
+              <p>🚨 سيتم مسح جدول الأصناف بالكامل لتتمكن من إعادة الاستيراد النظيف من ملف Excel/CSV وتفادي أي تعارض بالباركود والرمز المحاسبي القديم.</p>
+              <p>⚠️ لا يمكن التراجع عن هذا القرار بعد تنفيذه!</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-graphite/15">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                disabled={clearingAll}
+                className="px-4 py-2 text-xs font-bold border border-graphite/30 rounded hover:bg-graphite/10 cursor-pointer"
+              >
+                تراجع وإلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAll}
+                disabled={clearingAll}
+                className="bg-warn hover:bg-ink text-paper px-5 py-2 rounded text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center gap-1.5"
+              >
+                <span>{clearingAll ? "جارٍ التفريغ والحذف..." : "تأكيد حذف جميع الأصناف"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
