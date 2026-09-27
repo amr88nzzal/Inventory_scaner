@@ -48,5 +48,5 @@ RUN mkdir -p /app/uploads
 
 EXPOSE 3000
 
-# Entrypoint script: ensures database schema is up-to-date and starts the server
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/server.cjs"]
+# Entrypoint script: waits for database readiness, pushes schema, and starts server
+CMD ["sh", "-c", "until npx prisma db push --skip-generate; do echo 'Waiting for database connection...' && sleep 3; done && node dist/server.cjs"]
