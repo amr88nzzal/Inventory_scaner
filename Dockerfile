@@ -1,12 +1,15 @@
-FROM node:22-alpine AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
+
+# Install openssl and certificates for Prisma & Node build tools
+RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency manifests
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-# Install all dependencies
+# Install dependencies
 RUN npm install
 
 # Copy source code
@@ -19,14 +22,17 @@ RUN npx prisma generate --schema=prisma/schema.prisma
 RUN npm run build
 
 # Runner stage
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
+
+# Install openssl and certificates for Prisma runtime
+RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Install production dependencies only
+# Install production dependencies
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
