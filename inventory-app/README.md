@@ -1,13 +1,13 @@
 # تطبيق الجرد — Inventory Audit App
 
+> **ملاحظة (2026-11-12):** لوحة تحكم الأدمن (الويب) أصبحت نسخة واحدة فقط في `src/` بجذر المستودع. حُذف المجلد القديم `inventory-app/web/` لأنه كان نسخة متقادمة غير مستخدمة في البناء. أي إشارة إلى `web/` أدناه تعني `src/` في الجذر.
+
 هيكلية المشروع (المرحلة 1 + المرحلة 2):
 
 ```
 inventory-app/
 ├── backend/     # Node.js + Express + Prisma + PostgreSQL API
 │   └── README.md  ← تفاصيل الإعداد والنشر على سيرفر Oracle Cloud
-├── web/         # لوحة تحكم الأدمن — React + Vite + Tailwind
-│   └── README.md
 ├── mobile/      # React Native (Expo) — تطبيق الموظف للمسح والجرد
 │   └── README.md  ← يشمل إعداد إشعارات FCM
 └── docs/
